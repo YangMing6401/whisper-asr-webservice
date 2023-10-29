@@ -12,8 +12,12 @@ from fastapi.staticfiles import StaticFiles
 from whisper import tokenizer
 
 ASR_ENGINE = os.getenv("ASR_ENGINE", "openai_whisper")
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+
 if ASR_ENGINE == "faster_whisper":
     from .faster_whisper.core import transcribe, language_detection
+elif ASR_ENGINE == "whisperx":
+    from .mbain_whisperx.core import transcribe, language_detection
 else:
     from .openai_whisper.core import transcribe, language_detection
 
@@ -59,16 +63,44 @@ async def index():
 
 
 @app.post("/asr", tags=["Endpoints"])
-async def asr(
-        task: Union[str, None] = Query(default="transcribe", enum=["transcribe", "translate"]),
-        language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
-        initial_prompt: Union[str, None] = Query(default=None),
-        audio_file: UploadFile = File(...),
-        encode: bool = Query(default=True, description="Encode audio first through ffmpeg"),
-        output: Union[str, None] = Query(default="txt", enum=["txt", "vtt", "srt", "tsv", "json"]),
-        word_timestamps: bool = Query(default=False, description="Word level timestamps")
+def asr(
+    task : Union[str, None] = Query(default="transcribe", enum=["transcribe", "translate"]),
+    language: Union[str, None] = Query(default=None, enum=LANGUAGE_CODES),
+    initial_prompt: Union[str, None] = Query(default=None),
+    audio_file: UploadFile = File(...),
+    encode : bool = Query(default=True, description="Encode audio first through ffmpeg"),
+    output : Union[str, None] = Query(default="txt", enum=["txt", "vtt", "srt", "tsv", "json"]),
+    word_timestamps : bool = Query(
+        default=False, 
+        description="World level timestamps", 
+        include_in_schema=(True if ASR_ENGINE == "faster_whisper" else False)
+    ),
+    diarize : bool = Query(
+        default=False,
+        description="Diarize the input",
+        include_in_schema=(True if ASR_ENGINE == "whisperx" and HF_TOKEN != "" else False)),
+    min_speakers : Union[int, None] = Query(
+        default=None,
+        description="Min speakers in this file",
+        include_in_schema=(True if ASR_ENGINE == "whisperx" else False)),
+    max_speakers : Union[int, None] = Query(
+        default=None,
+        description="Max speakers in this file",
+        include_in_schema=(True if ASR_ENGINE == "whisperx" else False)),
 ):
-    result = transcribe(load_audio(audio_file.file, encode), task, language, initial_prompt, word_timestamps, output)
+    result = transcribe(
+        load_audio(audio_file.file, encode),
+        task, 
+        language,
+        initial_prompt,
+        word_timestamps,
+        {
+            "diarize": diarize,
+            "min_speakers": min_speakers,
+            "max_speakers": max_speakers
+        },
+        output)
+    
     return StreamingResponse(
         result,
         media_type="text/plain",
