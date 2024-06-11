@@ -11,7 +11,18 @@ from fastapi.responses import StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from whisper import tokenizer
 from urllib.parse import quote
+import logging
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
 ASR_ENGINE = os.getenv("ASR_ENGINE", "openai_whisper")
 if ASR_ENGINE == "faster_whisper":
     from .faster_whisper.core import transcribe, language_detection
@@ -73,6 +84,13 @@ async def asr(
         word_timestamps: bool = Query(default=False, description="Word level timestamps"),
         output: Union[str, None] = Query(default="txt", enum=["txt", "vtt", "srt", "tsv", "json"])
 ):
+    logger.info(f"Encode: {encode}")
+    logger.info(f"Task: {task}")
+    logger.info(f"Language: {language}")
+    logger.info(f"Initial prompt: {initial_prompt}")
+    logger.info(f"VAD filter: {vad_filter}")
+    logger.info(f"Word timestamps: {word_timestamps}")
+    logger.info(f"Output: {output}")
     result = transcribe(load_audio(audio_file.file, encode), task, language, initial_prompt, vad_filter, word_timestamps, output)
     return StreamingResponse(
     result,
